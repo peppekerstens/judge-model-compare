@@ -1,0 +1,11 @@
+# The judge on the fork endpoint /v1/decision. It runs on LXC 110, next to the other
+# services. It holds no model: the model runs in the fork server on legion-t5.
+# Build from this folder: docker build -t jev-poc/decision-judge .
+FROM python:3.13-slim
+RUN pip install --no-cache-dir fastapi "uvicorn[standard]" httpx
+# DECISION_URL comes from docker run or from the compose file. See ../../.env.example.
+ENV PYTHONUNBUFFERED=1 JUDGE_MODEL=qwen3.5-4b-decision-fork
+WORKDIR /app
+COPY app.py /app/app.py
+EXPOSE 8085
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8085"]

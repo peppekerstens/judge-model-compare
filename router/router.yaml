@@ -1,0 +1,76 @@
+# Routing policy. `name` must match a model_name in config.yaml.
+#
+# Without TYPESAFE_API_KEY the rules baseline picks the cheapest eligible model.
+# With TYPESAFE_API_KEY, Jev picks among the eligible models.
+
+objective: quality_per_dollar
+aliases: [jev-router, auto]
+fallback: claude-sonnet
+
+jev:
+  model: jev-latest
+  timeout_ms: 5000
+
+candidates:
+  - name: claude-sonnet
+    description: Strong general coding and agentic model. Good default when quality matters more than cost.
+    vision: true
+    tools: true
+    context: 200000
+    max_output: 64000
+    price_in: 3.0
+    price_out: 15.0
+
+  - name: gpt-5
+    description: Frontier reasoning and tool use. Reserve for hard, multi-step tasks where cost is secondary.
+    vision: true
+    tools: true
+    context: 400000
+    max_output: 128000
+    price_in: 5.0
+    price_out: 20.0
+
+  - name: gemini-pro
+    description: Long-context reasoning with strong vision. Good for large inputs and multimodal work.
+    vision: true
+    tools: true
+    context: 1000000
+    max_output: 65536
+    price_in: 2.5
+    price_out: 10.0
+
+  - name: deepseek-v4
+    description: Cheap, capable coding and tool-use model. Best when the task is routine and text-only.
+    vision: false
+    tools: true
+    context: 128000
+    max_output: 65536
+    price_in: 0.27
+    price_out: 1.1
+
+  - name: glm-5
+    description: Efficient agentic coder. A step up from the cheapest tier for sustained coding work.
+    vision: false
+    tools: true
+    context: 200000
+    max_output: 128000
+    price_in: 0.6
+    price_out: 2.2
+
+  - name: kimi-k2
+    description: Long-context reasoning and coding. Good for large diffs and long tool traces.
+    vision: false
+    tools: true
+    context: 200000
+    max_output: 65536
+    price_in: 0.6
+    price_out: 2.5
+
+  - name: qwen3
+    description: Small, fast MoE. Cheapest option for simple, high-volume, text-only requests.
+    vision: false
+    tools: true
+    context: 128000
+    max_output: 32768
+    price_in: 0.15
+    price_out: 1.0

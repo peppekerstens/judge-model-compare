@@ -1,0 +1,8 @@
+# Tokenizer-only runtime for remote SemIf scoring. No torch: the forward pass runs in llama-server.
+# transformers 5.17.0 is the version that SemIf pins (SemIf pyproject.toml).
+FROM ghcr.io/astral-sh/uv:python3.13-trixie-slim
+RUN uv pip install --system "transformers==5.17.0" "jinja2>=3.1" "huggingface_hub"
+ENV HF_HOME=/srv/semif-test/hf \
+    PYTHONPATH=/srv/semif-test/SemIf/src:/srv/semif-test/jevbench:/srv/semif-test \
+    PYTHONUNBUFFERED=1
+WORKDIR /srv/semif-test

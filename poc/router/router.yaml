@@ -1,0 +1,63 @@
+# Routing policy of the proof of concept.
+# The judge answers 2 questions for each request. The sensitivity rule runs first.
+
+judge_timeout_s: 60
+
+questions:
+  sensitive: >-
+    Does the conversation contain personal data or sensitive information?
+    Personal data is a name, an address, an e-mail address, a telephone number,
+    a bank or a medical detail of a person. Sensitive information is a password,
+    an API key, an internal IP address, a private file path, or a fact about a
+    private network or a private company that is not public knowledge.
+  sensitive_true: The conversation contains personal data or sensitive information.
+  sensitive_false: The conversation contains no personal data and no sensitive information.
+  difficulty: >-
+    How hard is this request for a language model? Judge the reasoning that the
+    answer needs, not the length of the text.
+  difficulty_levels:
+    simple: >-
+      A fact, a definition, a short rewrite, a translation, a greeting, or a
+      question with one clear answer. No reasoning steps are needed.
+    medium: >-
+      A short explanation, a small piece of code, a summary, or a comparison
+      with 2 or 3 reasoning steps.
+    hard: >-
+      A multi-step analysis, a design or an architecture question, a proof, a
+      long piece of code, a trade-off between several options, or a question
+      that needs planning.
+
+routes:
+  sensitive: qwen3.8-27b-local
+  simple: qwen3.8-27b-nothink
+  medium: qwen3.8-27b-local
+  hard: qwen3.7-max
+  fallback: qwen3.8-27b-local
+
+targets:
+  - name: qwen3.8-27b-nothink
+    model: qwen3.8-27b
+    api_base: ${GAMING_URL}/v1
+    params:
+      reasoning_effort: none
+    timeout_s: 600
+    cloud: false
+
+  - name: qwen3.8-27b-local
+    model: qwen3.8-27b
+    api_base: ${GAMING_URL}/v1
+    params:
+      reasoning_effort: low
+    timeout_s: 900
+    cloud: false
+
+  - name: qwen3.7-max
+    model: qwen3.7-max
+    api_base: https://opencode.ai/zen/go/v1
+    api_key_env: OPENCODE_GO_API_KEY
+    # OpenCode Go asks for a session id on every request (mail of 2026-09-05).
+    # One fixed value for this deployment, like the gateway on LXC 109 uses. Not a secret.
+    headers:
+      x-opencode-session: "jev-poc-lxc110-b2b3d9ae-acb1-46fe-91be-e9d00fab523d"
+    timeout_s: 600
+    cloud: true

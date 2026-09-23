@@ -1,0 +1,49 @@
+# Proof of concept on the container host. The addresses come from poc/.env.
+# Start with: docker compose up -d --build   (from /opt/jev-poc)
+# The build context is the repo root, so the judge image can copy semif-test/remote_semif.py.
+
+services:
+  semif-judge:
+    build:
+      context: ..
+      dockerfile: poc/judge/Dockerfile
+    image: jev-poc/semif-judge
+    container_name: semif-judge
+    restart: unless-stopped
+    environment:
+      # The judge model runs on the GPU host. Port 11434 is the test server, not a service.
+      # The address comes from .env next to this file. See ../.env.example.
+      SEMIF_LLAMA_URL: ${SEMIF_LLAMA_URL:?set SEMIF_LLAMA_URL in poc/.env}
+      # The image holds the tokenizer of the 2B, the 4B and the 9B model.
+      # Set both to the model that llama-server serves, then restart the container.
+      JUDGE_MODEL: ${JUDGE_MODEL:-Qwen/Qwen3.5-4B}
+      JUDGE_REVISION: ${JUDGE_REVISION:-851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a}
+      SEMIF_N_PROBS: "200"
+      SEMIF_MAX_TOKENS: "16384"
+      HF_HUB_OFFLINE: "1"
+    ports:
+      - "8080:8080"
+
+  jev-router:
+    build:
+      context: ..
+      dockerfile: poc/router/Dockerfile
+    image: jev-poc/router
+    container_name: jev-router
+    restart: unless-stopped
+    depends_on: [semif-judge]
+    environment:
+      JUDGE_URL: http://semif-judge:8080
+      # The router policy uses ${GAMING_URL}. See ../.env.example.
+      GAMING_URL: ${GAMING_URL:?set GAMING_URL in poc/.env}
+      ROUTER_CONFIG: /app/router.yaml
+      ROUTER_DB: /data/decisions.db
+      # The cloud key comes from .env next to this file. gopass is the source.
+      OPENCODE_GO_API_KEY: ${OPENCODE_GO_API_KEY}
+    volumes:
+      - router-data:/data
+    ports:
+      - "8081:8081"
+
+volumes:
+  router-data:

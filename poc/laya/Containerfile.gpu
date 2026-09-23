@@ -1,0 +1,18 @@
+# The Laya judge on the GPU, for legion-t5 with Podman and the NVIDIA container toolkit.
+# Build:  podman build -f Containerfile.gpu -t laya-judge-gpu .
+# Run:    podman run -d --name laya-judge-gpu --device nvidia.com/gpu=all -p 8083:8082 \
+#           -e LAYA_DEVICE=cuda laya-judge-gpu
+# The driver on legion-t5 is 595.91.07 with CUDA 13.2, so the cu128 build of torch fits.
+FROM docker.io/library/python:3.13-slim
+
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu128 torch && \
+    pip install --no-cache-dir "laya==0.3.5" fastapi "uvicorn[standard]"
+
+ENV HF_HOME=/hf LAYA_MODEL=convaiinnovations/laya-multilingual LAYA_DEVICE=cuda PYTHONUNBUFFERED=1
+RUN python -c "from huggingface_hub import snapshot_download; \
+    snapshot_download('convaiinnovations/laya-multilingual')"
+
+WORKDIR /app
+COPY app.py /app/app.py
+EXPOSE 8082
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8082"]

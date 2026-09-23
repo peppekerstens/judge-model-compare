@@ -1,0 +1,47 @@
+# LiteLLM proxy config. Run with: litellm --config config.yaml --port 4000
+#
+# Clients call model "jev-router". The pre-call hook in jev_router.hook rewrites
+# it to one of the candidate model_names below. Edit the OpenRouter slugs to
+# match the models you want in the pool.
+
+model_list:
+  # The id clients send. Points at the fallback so LiteLLM has a valid target if
+  # the hook does not run.
+  - model_name: jev-router
+    litellm_params:
+      model: openrouter/anthropic/claude-sonnet-4
+
+  - model_name: claude-sonnet
+    litellm_params:
+      model: openrouter/anthropic/claude-sonnet-4
+
+  - model_name: gpt-5
+    litellm_params:
+      model: openrouter/openai/gpt-5
+
+  - model_name: gemini-pro
+    litellm_params:
+      model: openrouter/google/gemini-2.5-pro
+
+  - model_name: deepseek-v4
+    litellm_params:
+      model: openrouter/deepseek/deepseek-chat
+
+  - model_name: glm-5
+    litellm_params:
+      model: openrouter/z-ai/glm-4.6
+
+  - model_name: kimi-k2
+    litellm_params:
+      model: openrouter/moonshotai/kimi-k2
+
+  - model_name: qwen3
+    litellm_params:
+      model: openrouter/qwen/qwen3-235b-a22b
+
+litellm_settings:
+  callbacks: jev_router.hook.proxy_handler_instance
+  drop_params: true
+
+general_settings:
+  master_key: sk-jev-router

@@ -1,0 +1,60 @@
+# llama.cpp fork of Codacus, branch parallel-decision, with the CUDA build.
+# It adds POST /v1/decision to llama-server: several typed fields in one call, and
+# an exact softmax over the allowed values. The audit of the diff is in
+# ../../docs/08-codacus-llama-fork.md.
+#
+# Build on legion-t5:  podman build -t decision-fork .
+# The build stage is about 6 GB. The final image keeps only the CUDA runtime and the binaries.
+
+ARG CUDA=12.8.1
+ARG UBUNTU=24.04
+
+FROM docker.io/nvidia/cuda:${CUDA}-devel-ubuntu${UBUNTU} AS build
+ARG FORK_URL=https://github.com/thecodacus/llama.cpp
+ARG FORK_BRANCH=parallel-decision
+# Pin the commit, so a rebuild gives the same binary. Read it from the audit document.
+ARG FORK_COMMIT=14d04e755fa28653e87b9a07072892265bdc0fad
+# The 3060 Ti is Ampere: compute capability 8.6.
+ARG CUDA_ARCH=86
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git cmake build-essential libcurl4-openssl-dev ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN git clone --branch ${FORK_BRANCH} --single-branch ${FORK_URL} /src && \
+    if [ -n "${FORK_COMMIT}" ]; then git -C /src checkout ${FORK_COMMIT}; fi && \
+    git -C /src log -1 --format='fork commit %H %cs %s' > /src/BUILD_COMMIT.txt && \
+    cat /src/BUILD_COMMIT.txt
+
+# The devel image ships the CUDA driver API as a stub library only. Without the stub
+# folder on the link line, the link fails with "undefined reference to cuMemCreate".
+# The symbolic link gives the stub the runtime name that the linker asks for.
+ENV LIBRARY_PATH=/usr/local/cuda/lib64/stubs
+RUN ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1
+
+# LLAMA_CURL=OFF removes the -hf download path, so the binary cannot fetch a model.
+RUN cmake -S /src -B /build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH} \
+      -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_EXE_LINKER_FLAGS="-L/usr/local/cuda/lib64/stubs -lcuda" \
+      -DCMAKE_SHARED_LINKER_FLAGS="-L/usr/local/cuda/lib64/stubs -lcuda" && \
+    cmake --build /build --config Release -j $(nproc) --target llama-server llama-parallel-decision
+
+FROM docker.io/nvidia/cuda:${CUDA}-runtime-ubuntu${UBUNTU}
+# llama-server needs the OpenMP runtime, and the test needs curl. The CUDA
+# runtime image carries neither.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 curl && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=build /build/bin/ /opt/llama-decision/
+COPY --from=build /src/BUILD_COMMIT.txt /opt/llama-decision/BUILD_COMMIT.txt
+ENV LD_LIBRARY_PATH=/opt/llama-decision
+# --decision-seqs 24 turns the endpoint on. It also forces the unified KV cache.
+# DECISION_SEQS=3 is the minimum that turns the endpoint on. Qwen3.5 is a hybrid
+# attention model, so its recurrent-state cache scales with n_seq_max. With 24
+# sequences and 16384 tokens the 8 GB card fails with "failed to allocate buffer
+# for rs cache". Measured on 2026-09-23: 3 sequences and 8192 tokens start.
+ENV MODEL=/models/qwen3.5-4b.gguf DECISION_SEQS=3 PORT=11436 CTX=8192 NGL=99
+EXPOSE 11436
+CMD ["/bin/sh", "-c", "/opt/llama-decision/llama-server --model $MODEL --alias decision-fork \
+  --host 0.0.0.0 --port $PORT --n-gpu-layers $NGL --ctx-size $CTX --parallel 1 \
+  --decision-seqs $DECISION_SEQS --flash-attn on"]

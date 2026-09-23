@@ -1,0 +1,18 @@
+# The Laya judge, for legion-t5 with Podman. CPU only: the GPU holds the SemIf judge model.
+# Build:  podman build -f Containerfile -t laya-judge .
+# Run:    podman run -d --name laya-judge -p 8082:8082 laya-judge
+FROM docker.io/library/python:3.13-slim
+
+# Torch from the CPU index. The GPU build is 10 times larger and it is not needed here.
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch && \
+    pip install --no-cache-dir "laya==0.3.5" fastapi "uvicorn[standard]"
+
+ENV HF_HOME=/hf LAYA_MODEL=convaiinnovations/laya-multilingual LAYA_DEVICE=cpu PYTHONUNBUFFERED=1
+# Bake the checkpoint into the image, so the service needs no internet at runtime.
+RUN python -c "from huggingface_hub import snapshot_download; \
+    snapshot_download('convaiinnovations/laya-multilingual')"
+
+WORKDIR /app
+COPY app.py /app/app.py
+EXPOSE 8082
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8082"]
