@@ -132,7 +132,8 @@ Checked live on 2026-09-24, after the cleanup.
 | 3 | Decide on the fork: keep the letter method, or take the speed win for the difficulty question only | 30 minutes | `../poc/results/README.md` |
 | 4 | Stage 2 of the router: authentication, and a rate limit | not planned | `07-poc-router-plan.md` |
 | 5 | ~~Send real traffic through the PII gate~~ **Done on 2026-09-24. 0 placeholder defects, and 9 of 12 answers do the same job** | done | `../pii-proxy/README.md` |
-| 6 | Decide on the PII chain: keep this gate, or switch on the LiteLLM Presidio guardrail | 30 minutes | `../pii-proxy/README.md` |
+| 6 | ~~Decide on the PII chain~~ **Done on 2026-09-24. Keep the gate. The guardrail loses on 6 measured points** | done | `../pii-proxy/README.md` |
+| 7 | Mask and restore the arguments of a tool call. The gate does not touch them today | 2 hours | `../pii-proxy/README.md` |
 
 ## Open items
 

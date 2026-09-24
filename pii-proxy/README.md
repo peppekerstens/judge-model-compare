@@ -272,9 +272,49 @@ holds a spaCy model, and 4 GB is not enough next to the LiteLLM stack.
    requests ran through the gate, with a raw answer next to each one. See part 4b.
 3. **A mask can break an answer.** The traffic test measured it: 2 of 12 answers
    lost quality, because the reasoning needed the value itself. See part 4b.
-4. **The gate keeps the map in memory for the length of 1 request.** A second
+4. **The gate does not touch the arguments of a tool call.** A name inside
+   `tool_calls[].function.arguments` reaches the model without a mask. LiteLLM
+   fixed the same gap upstream in PR 32014. This is the next work item.
+5. **The gate keeps the map in memory for the length of 1 request.** A second
    turn in the same conversation gets a new map, so an older placeholder in the
    history does not restore. This is the same limit as the open LiteLLM issue.
+
+## 8. The decision, 2026-09-24: keep this gate
+
+**Keep the gate. Do not switch on the LiteLLM Presidio guardrail.** Every reason
+below comes from a measurement in part 4 or 4b, or from an open upstream issue.
+
+| # | Point | This gate | The LiteLLM guardrail |
+|---|---|---|---|
+| 1 | The placeholder of a value | Numbered for each value, and stable inside a request. The round trip was exact 24 of 24 | The counter restarts on every request. [Issue 41600](https://github.com/BerriAI/litellm/issues/41600) is open since 2026-09-17 |
+| 2 | A clean request | The fork reads the raw text first, so a clean request gets no mask | It masks every request. Our test showed that breaks "What is the capital of France?" |
+| 3 | A password or a key in the answer | It keeps the placeholder, so the secret never returns | `output_parse_pii` restores every token, and the password comes back |
+| 4 | A stream | It streams. The first chunk came in 0.7 to 1.2 s | It buffers the whole stream to the end. See [PR 42351](https://github.com/BerriAI/litellm/pull/42351) |
+| 5 | A placeholder the model invented | It becomes a readable word | It stays in the answer as `<IP_ADDRESS_2>` |
+| 6 | The route decision | The same fork call answers the sensitivity and the difficulty, so the route costs nothing more | It has no route decision |
+
+### Where the guardrail wins, and why that does not decide it
+
+| Point | Why it does not decide it |
+|---|---|
+| Someone else maintains it | The gate is 1 file of about 250 lines, and it holds no model. The cost of keeping it is low |
+| It sits inside the gateway, with no new hop | The extra hop costs 0.38 s, measured. The mask itself costs 4.8 ms |
+| It masks the arguments of a tool call. See [PR 32014](https://github.com/BerriAI/litellm/pull/32014) | A real gap of this gate. It is the next work item, and no consumer of the router uses tool calls today |
+
+### The 2 conditions that change the decision
+
+Switch to the guardrail when both hold.
+
+1. Issue 41600 closes, and a placeholder comes from the value itself.
+2. The guardrail gains a rule that skips a clean request, so an over-mask cannot
+   break the answer.
+
+### What stays of the Presidio work either way
+
+The analyzer and the anonymizer stay on LXC 109. The gate uses the analyzer.
+The anonymizer stays for the day the guardrail wins, because the guardrail needs
+both containers. The 4 custom recognizers live in `gate.py`, and the guardrail
+route would need them in the analyzer image instead.
 
 ## 7. References
 
