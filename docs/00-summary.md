@@ -14,6 +14,7 @@ Scores come from JevBench v1.3.0, scored on 2026-09-21. The score is the geometr
 | Bespoke Nimble 9B | 9B, LoRA adapter 173 MB | No merged weights, no GGUF | Apache-2.0 | 60.5 (#24) | 65.5 % | No (CUDA BF16 only) | No (about 18 GB) | CUDA only |
 | OpenJev (Wortega) | 0.8B / 4B / 35B-A3B NLI | Safetensors, no GGUF | MIT | Not ranked | - | Not verified | Maybe, 0.8B (1.7 GB) | NLI labels only. Cannot pick from own labels |
 | Laya | ModernBERT-large 421M | 843 MB | Apache-2.0 | 54.4 (#33) | 34.1 % | Yes, CPU | Yes, CPU or CUDA | Needs a fine-tune on own data. No server |
+| Needle 3 (Cactus) | Laddered attention 121M | `.cact` 35.3 MB, CQ2-bit | Apache-2.0 | 22.5, not ranked (partial run) | 7.7 % | Yes, CPU | Yes, CPU | No GPU path. It abstains on a question about a text, because it looks for a tool that serves the request. Tested 2026-09-24: 0 and 1 of 24 |
 | NanoJev | Qwen3-0.6B plus heads | 2.39 GB FP32 | MIT | Not ranked | - | Not verified | Probably | Trained on 4 games only. Not a general classifier |
 | OpenSourceJev | Stock Qwen3-1.7B or Qwen3.5-4B GGUF | 1.83 / 2.74 GB | MIT | Not listed | - | No, as shipped | No, as shipped | Windows only (`llama.dll` through ctypes) |
 | Jev-Style-Qwen3.5-2B | 2B | GGUF Q4_K_M 1.3 GB | Not verified | Not listed | - | Not verified | On paper yes | No benchmark. Not verified |

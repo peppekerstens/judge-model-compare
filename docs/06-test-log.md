@@ -89,6 +89,8 @@ The judge answers 2 questions for each request: sensitive data (yes or no), and 
 
 | Problem | Cause | Fix |
 |---|---|---|
+| `pip install cactus-needle` stopped with HTTP 404 | Version 3.0.5 asks Hugging Face for an engine wheel 3.0.2, and that file does not exist | Pin `cactus-needle==3.0.1` in the `Containerfile` |
+| `results_table.py` stopped with a `None` error on the Needle rows | A judge that abstains gives no value, and the header was fixed to the Qwen judges | A dynamic header from `ORDER`, and the text "abstained" for an empty answer |
 | The CUDA build of the fork failed with `undefined reference to cuMemCreate` | The CUDA devel image ships the driver API as a stub only | The stub folder on the link line, a `libcuda.so.1` link, and the linker flags |
 | The fork binary stopped with `libgomp.so.1: cannot open shared object file` | The CUDA runtime image has no OpenMP | `libgomp1` in the runtime stage |
 | The fork server stopped with `failed to allocate buffer for rs cache` | Qwen3.5 is hybrid attention, so the recurrent-state cache scales with `--decision-seqs` | 3 sequences and a context of 8,192 |

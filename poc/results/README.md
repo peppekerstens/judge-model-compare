@@ -8,7 +8,7 @@ The same 4B model on the llama.cpp fork answers both questions in 1 call. It is 
 
 Laya multilingual joined the bench on 2026-09-23 as a fourth judge. It reads 4 of 24 cases right, so it is not usable without a fine-tune.
 
-Needle 3 joined on 2026-09-24, in both of its modes. It reads 0 and 1 of 24 cases right, and it abstains on 47 of 48 questions in the default mode. It is not usable as a judge. It ran twice: on the CPU and on the GPU of legion-t5.
+Needle 3 joined on 2026-09-24, in both of its modes. It reads 0 and 1 of 24 cases right, and it abstains on 47 of 48 questions in the default mode. It is not usable as a judge. It ran twice on the CPU of legion-t5, once for each mode. The engine has no GPU path.
 
 ## Method
 

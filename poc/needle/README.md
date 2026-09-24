@@ -370,10 +370,31 @@ one, Needle 3 gets "none (label only)", the same words the JevBench row uses.
 | File | What |
 |---|---|
 | `README.md` | This document |
-| `app.py` | **Untested draft.** The `/v1/systemone` adapter for Needle 3. It was never run |
-| `Containerfile` | **Untested draft.** The CPU image, in the shape of `../laya/Containerfile`. It was never built |
+| `Containerfile` | **Built and used.** The CPU image: `python:3.13-slim`, `cactus-needle==3.0.1`, the weights baked in |
+| `smoke-test.py` | The first check: 3 cases, both questions, in the container. It proves the engine answers before the full bench starts |
+| `needle_bench.py` | The full bench: the 24 cases of `../judge_cases.jsonl`, in both modes. It writes a result file for `../results_table.py` |
+| `app.py` | **Untested draft.** The `/v1/systemone` adapter. A service adds nothing while the engine abstains |
 
-There is no deploy script on purpose. Nothing here ran, so nothing here should run by itself.
+### Replay the test
+
+Run the 3 steps on the model host. The whole run takes about 20 minutes, and most of that is the build.
+
+1. Build the image. The weights go into the image, so the container needs no network:
+
+       podman build -t needle-smoke -f poc/needle/Containerfile poc/needle
+
+2. Run the smoke test. It must show an answer for the 3 cases:
+
+       podman run --rm -v $PWD/poc/needle:/app:ro needle-smoke python /app/smoke-test.py
+
+3. Run the bench, once for each mode. Each run writes 1 JSON file into `out/`:
+
+       podman run --rm -v $PWD/poc/needle:/app:ro -v $PWD/poc:/poc:ro needle-smoke \
+         python /app/needle_bench.py --mode record_decision --cases /poc/judge_cases.jsonl --out /app/out
+       podman run --rm -v $PWD/poc/needle:/app:ro -v $PWD/poc:/poc:ro needle-smoke \
+         python /app/needle_bench.py --mode tools --cases /poc/judge_cases.jsonl --out /app/out
+
+Copy the 2 JSON files to `../results/`, then run `python3 poc/results_table.py` to rebuild the tables.
 
 ## Verification state
 
@@ -383,7 +404,8 @@ There is no deploy script on purpose. Nothing here ran, so nothing here should r
 | The JevBench numbers | Verified against `results/v1.2/jevbench-v1.2-per-task.json` (revision v1.3.0), `results/v1.4/jevbench-v1.4-results.json` and benchmarkheaven.com |
 | The video content | Verified. The transcript was read with `youtube-transcript-api`. It was not blocked |
 | The parameter count of 53M in the video | Not verified. The model card says 121M |
-| The latency on our hardware | Not verified. No test ran |
+| The latency on our hardware | Verified on 2026-09-24. 0.20 s for both questions, on the CPU of legion-t5 |
 | The CPU instruction requirement of the engine | Not verified. Not documented |
-| The peak RAM on our hardware | Not verified. The documentation shows 28.5 MB and 88.5 MB in examples |
-| `app.py` and `Containerfile` in this folder | Not verified. Never run, never built |
+| The peak RAM on our hardware | Verified on 2026-09-24. About 100 MB |
+| `Containerfile`, `smoke-test.py` and `needle_bench.py` | Verified on 2026-09-24. Built and run on legion-t5 |
+| `app.py` in this folder | Not verified. Never run. A service adds nothing while the engine abstains |
