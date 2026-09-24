@@ -5,3 +5,4 @@ poc/.env
 # Output of a run on a host
 *.log
 *.pcap
+__pycache__/
