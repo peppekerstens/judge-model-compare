@@ -197,6 +197,9 @@ holds a spaCy model, and 4 GB is not enough next to the LiteLLM stack.
 
 1. **The fork and `llama-rerank` share port 11436 and the same card.** Only one
    of the 2 runs. `gpu-window.sh` switches between them in 1 command.
+   A `/health` of 200 on that port proves nothing, because `llama-rerank` is
+   also a llama-server and answers it. `/healthz` of the gate therefore sends
+   1 small decision, and it reports `decision_endpoint` true or false.
 2. **No real traffic ran through the gate yet.** The bench measures the decision
    and the mask, not the answer quality of a masked prompt.
 3. **A mask can break an answer.** A request like "correct this address" fails

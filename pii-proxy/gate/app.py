@@ -88,14 +88,32 @@ def replace_user_text(messages: list, new_text: str) -> list:
 
 @app.get("/healthz")
 async def healthz() -> dict:
+    """A `/health` of 200 on the fork port is not enough.
+
+    `llama-rerank` uses the same port 11436 on the same host, and it is also a
+    llama-server, so it answers `/health` with 200. Only `/v1/decision` tells
+    the 2 apart. The check therefore sends 1 small decision.
+    """
     state = {"service": "pii-gate", "analyzer": ANALYZER, "fork": FORK,
              "upstream": UPSTREAM}
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         for name, url in (("analyzer", f"{ANALYZER}/health"), ("fork", f"{FORK}/health")):
             try:
                 state[f"{name}_status"] = (await client.get(url)).status_code
             except Exception as error:  # noqa: BLE001
                 state[f"{name}_status"] = f"error: {type(error).__name__}"
+        try:
+            probe = await client.post(f"{FORK}/v1/decision", json={
+                "instructions": "Answer the field.",
+                "schema": {"ok": {"type": "boolean", "description": "Is this text empty?"}},
+                "contexts": ["ping"]})
+            state["decision_endpoint"] = probe.status_code == 200
+            if probe.status_code != 200:
+                state["decision_note"] = (
+                    "the port answers, but not with /v1/decision. llama-rerank "
+                    "probably holds it. Use pii-proxy/gpu-window.sh open")
+        except Exception as error:  # noqa: BLE001
+            state["decision_endpoint"] = f"error: {type(error).__name__}"
     return state
 
 
