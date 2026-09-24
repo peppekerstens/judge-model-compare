@@ -6,7 +6,9 @@ The 3 Qwen models read the sensitivity question right in every case, 24 of 24.
 
 The same 4B model on the llama.cpp fork answers both questions in 1 call. It is 2.2 times faster (0.28 s against 0.51 s), and it reads 21 of 24 cases right. It misses 2 sensitivity cases that the letter method reads right.
 
-Laya multilingual joined the bench on 2026-09-23 as a fourth judge. It reads 4 of 24 cases right, so it is not usable without a fine-tune. It ran twice: on the CPU and on the GPU of legion-t5.
+Laya multilingual joined the bench on 2026-09-23 as a fourth judge. It reads 4 of 24 cases right, so it is not usable without a fine-tune.
+
+Needle 3 joined on 2026-09-24, in both of its modes. It reads 0 and 1 of 24 cases right, and it abstains on 47 of 48 questions in the default mode. It is not usable as a judge. It ran twice: on the CPU and on the GPU of legion-t5.
 
 ## Method
 
@@ -17,6 +19,7 @@ Laya multilingual joined the bench on 2026-09-23 as a fourth judge. It reads 4 o
 - The model swap uses `switch_judge.sh`. It serves the GGUF on legion-t5 and points the container at the matching tokenizer.
 - Each model ran the cases once. There are no repeat draws.
 - The judge `qwen3.5-4b-decision-fork` is the same GGUF, served by the llama.cpp fork with the `/v1/decision` endpoint. The judge service for it is `poc/decision-judge/` on LXC 110, port 8085.
+- Needle 3 runs in a Podman container on the CPU of the same host, through `poc/needle/needle_bench.py`. The package holds no server, so the bench runs the engine in its own process.
 - The 3 Qwen judges run in llama-server on the legion-t5 GPU. Laya runs in a Podman container on legion-t5: port 8082 on the CPU, and port 8083 on the GPU.
 
 ## Why the test stopped at 24 cases
@@ -28,7 +31,7 @@ The rule was to add cases as long as the models answer the same. Round 1 already
 | Judge model | VRAM | Sensitive | Difficulty | Both | Median time | Mean time | Slowest |
 |---|---|---|---|---|---|---|---|
 | Qwen/Qwen3.5-2B | 1,712 MiB | 24/24 | 12/24 | 12/24 | 0.41 s | 0.48 s | 1.78 s |
-| Qwen/Qwen3.5-4B | 3,568 MiB | 24/24 | 23/24 | 23/24 | 0.51 s | 0.60 s | 1.88 s |
+| Qwen/Qwen3.5-4B | 3,568 MiB | 24/24 | 23/24 | 23/24 | 0.56 s | 0.67 s | 2.18 s |
 | Qwen/Qwen3.5-9B | 5,932 MiB | 24/24 | 22/24 | 22/24 | 0.80 s | 0.88 s | 2.20 s |
 | qwen3.5-4b-decision-fork | 3,452 MiB | 22/24 | 23/24 | 21/24 | 0.28 s | 0.27 s | 0.41 s |
 | qwen3.5-4b-decision-fork-true_only | 3,452 MiB | 22/24 | 23/24 | 21/24 | 0.25 s | 0.29 s | 0.51 s |
@@ -36,34 +39,37 @@ The rule was to add cases as long as the models answer the same. Round 1 already
 | qwen3.5-4b-decision-fork-enum | 3,452 MiB | 21/24 | 20/24 | 17/24 | 0.29 s | 0.28 s | 0.41 s |
 | convaiinnovations/laya-multilingual | none, CPU | 14/24 | 6/24 | 4/24 | 0.48 s | 1.35 s | 19.15 s |
 | laya-multilingual-gpu | 1,715 MiB | 14/24 | 6/24 | 4/24 | 0.20 s | 0.59 s | 10.02 s |
+| needle3-record_decision | none, CPU | 1/24 | 0/24 | 0/24 | 0.20 s | 0.20 s | 0.52 s |
+| needle3-tools | none, CPU | 1/24 | 6/24 | 1/24 | 0.21 s | 0.23 s | 0.41 s |
 
 ### The cases that a judge reads differently
 
-| Case | Wanted | Qwen3.5-2B | Qwen3.5-4B | Qwen3.5-9B | 4B on the fork | Laya CPU | Laya GPU |
-|---|---|---|---|---|---|---|---|
-| r1-02 | simple, sensitive False | hard | ok | ok | ok | ok | ok | ok | hard | hard |
-| r1-03 | simple, sensitive False | ok | ok | ok | ok | ok | ok | ok | ok, sensitive True | ok, sensitive True |
-| r1-04 | medium, sensitive False | hard | ok | ok | ok | ok | ok | ok | simple | simple |
-| r1-05 | medium, sensitive False | ok | ok | ok | ok | ok | ok | ok | simple, sensitive True | simple, sensitive True |
-| r1-06 | medium, sensitive False | hard | ok | ok | ok | ok | ok | ok | simple, sensitive True | simple, sensitive True |
-| r1-07 | hard, sensitive False | ok | ok | ok | ok | ok | ok | ok | simple | simple |
-| r1-08 | hard, sensitive False | ok | ok | ok | ok | ok | ok | ok | simple | simple |
-| r1-09 | hard, sensitive False | ok | ok | ok | ok | ok | ok | ok | simple | simple |
-| r1-10 | simple, sensitive True | ok | ok | ok | ok | ok | ok, sensitive False | ok, sensitive False | ok, sensitive False | ok, sensitive False |
-| r1-11 | medium, sensitive True | hard | ok | ok | ok | ok | ok | ok | simple, sensitive False | simple, sensitive False |
-| r1-12 | hard, sensitive True | ok | ok | ok | ok | ok | ok | ok | simple, sensitive False | simple, sensitive False |
-| r2-01 | medium, sensitive True | hard | ok | ok | ok | ok | ok, sensitive False | ok | simple, sensitive False | simple, sensitive False |
-| r2-02 | simple, sensitive True | hard | ok | ok | ok, sensitive False | ok, sensitive False | ok, sensitive False | ok, sensitive False | hard | hard |
-| r2-03 | medium, sensitive False | hard | ok | ok | ok | ok | ok | ok | simple, sensitive True | simple, sensitive True |
-| r2-04 | hard, sensitive False | ok | ok | ok | ok | ok | ok | medium | simple, sensitive True | simple, sensitive True |
-| r2-05 | hard, sensitive True | ok | ok | ok | ok | ok | ok | medium | simple | simple |
-| r2-06 | simple, sensitive False | hard | ok | ok | ok | ok | ok | ok | ok | ok |
-| r2-07 | hard, sensitive False | ok | ok | ok | ok | ok | ok | ok | simple | simple |
-| r2-08 | medium, sensitive True | hard | ok | hard | ok | ok | ok | simple | simple | simple |
-| r2-09 | medium, sensitive False | simple | simple | simple | simple | simple | simple | simple | simple, sensitive True | simple, sensitive True |
-| r2-10 | hard, sensitive False | ok | ok | ok | ok | ok | ok | ok | simple | simple |
-| r2-11 | simple, sensitive True | hard | ok | ok | ok, sensitive False | ok, sensitive False | ok, sensitive False | ok, sensitive False | ok | ok |
-| r2-12 | simple, sensitive False | hard | ok | ok | ok | ok | ok | ok | ok | ok |
+| Case | Wanted | 2B | 4B | 9B | fork | fork true_only | fork both | fork enum | Laya CPU | Laya GPU | Needle record | Needle tools |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| r1-01 | simple, sensitive False | ok | ok | ok | ok | ok | ok | ok | ok | ok | abstained, sensitive abstained | abstained, sensitive abstained |
+| r1-02 | simple, sensitive False | hard | ok | ok | ok | ok | ok | ok | hard | hard | abstained, sensitive abstained | abstained, sensitive abstained |
+| r1-03 | simple, sensitive False | ok | ok | ok | ok | ok | ok | ok | ok, sensitive True | ok, sensitive True | abstained, sensitive abstained | abstained, sensitive abstained |
+| r1-04 | medium, sensitive False | hard | ok | ok | ok | ok | ok | ok | simple | simple | abstained, sensitive abstained | ok, sensitive abstained |
+| r1-05 | medium, sensitive False | ok | ok | ok | ok | ok | ok | ok | simple, sensitive True | simple, sensitive True | abstained, sensitive abstained | simple, sensitive abstained |
+| r1-06 | medium, sensitive False | hard | ok | ok | ok | ok | ok | ok | simple, sensitive True | simple, sensitive True | abstained, sensitive abstained | abstained, sensitive abstained |
+| r1-07 | hard, sensitive False | ok | ok | ok | ok | ok | ok | ok | simple | simple | abstained, sensitive abstained | medium, sensitive abstained |
+| r1-08 | hard, sensitive False | ok | ok | ok | ok | ok | ok | ok | simple | simple | abstained, sensitive abstained | medium, sensitive abstained |
+| r1-09 | hard, sensitive False | ok | ok | ok | ok | ok | ok | ok | simple | simple | abstained, sensitive abstained | simple, sensitive abstained |
+| r1-10 | simple, sensitive True | ok | ok | ok | ok | ok | ok, sensitive False | ok, sensitive False | ok, sensitive False | ok, sensitive False | abstained, sensitive abstained | medium, sensitive abstained |
+| r1-11 | medium, sensitive True | hard | ok | ok | ok | ok | ok | ok | simple, sensitive False | simple, sensitive False | abstained | ok |
+| r1-12 | hard, sensitive True | ok | ok | ok | ok | ok | ok | ok | simple, sensitive False | simple, sensitive False | abstained, sensitive abstained | simple, sensitive abstained |
+| r2-01 | medium, sensitive True | hard | ok | ok | ok | ok | ok, sensitive False | ok | simple, sensitive False | simple, sensitive False | abstained, sensitive abstained | ok, sensitive abstained |
+| r2-02 | simple, sensitive True | hard | ok | ok | ok, sensitive False | ok, sensitive False | ok, sensitive False | ok, sensitive False | hard | hard | abstained, sensitive abstained | abstained, sensitive abstained |
+| r2-03 | medium, sensitive False | hard | ok | ok | ok | ok | ok | ok | simple, sensitive True | simple, sensitive True | abstained, sensitive abstained | ok, sensitive abstained |
+| r2-04 | hard, sensitive False | ok | ok | ok | ok | ok | ok | medium | simple, sensitive True | simple, sensitive True | abstained, sensitive abstained | abstained, sensitive abstained |
+| r2-05 | hard, sensitive True | ok | ok | ok | ok | ok | ok | medium | simple | simple | abstained, sensitive abstained | simple, sensitive abstained |
+| r2-06 | simple, sensitive False | hard | ok | ok | ok | ok | ok | ok | ok | ok | abstained, sensitive abstained | abstained, sensitive abstained |
+| r2-07 | hard, sensitive False | ok | ok | ok | ok | ok | ok | ok | simple | simple | abstained, sensitive abstained | medium, sensitive abstained |
+| r2-08 | medium, sensitive True | hard | ok | hard | ok | ok | ok | simple | simple | simple | abstained, sensitive abstained | ok, sensitive abstained |
+| r2-09 | medium, sensitive False | simple | simple | simple | simple | simple | simple | simple | simple, sensitive True | simple, sensitive True | abstained, sensitive abstained | simple, sensitive abstained |
+| r2-10 | hard, sensitive False | ok | ok | ok | ok | ok | ok | ok | simple | simple | abstained, sensitive abstained | medium, sensitive abstained |
+| r2-11 | simple, sensitive True | hard | ok | ok | ok, sensitive False | ok, sensitive False | ok, sensitive False | ok, sensitive False | ok | ok | abstained, sensitive abstained | ok, sensitive abstained |
+| r2-12 | simple, sensitive False | hard | ok | ok | ok | ok | ok | ok | ok | ok | abstained, sensitive abstained | abstained, sensitive abstained |
 
 ## End-to-end router test: 7 examples
 
@@ -106,7 +112,18 @@ More text makes it worse, not better. The first version stays the best. The `enu
 
 **Verdict: the letter method stays the judge of the router.** It reads 24 of 24 sensitivity cases right. The fork keeps its speed win, and it loses 2 sensitivity cases that we cannot fix with wording.
 
-7. **Cost of a judge call:** 0.60 s with the 4B model for both questions. The 9B model needs 0.88 s, which is 47 % more, for a worse score.
+7. **Needle 3 answers a different question.** The engine looks for a tool that serves the request. Our judge asks a question about the request. Needle then answers "No tool available for geography or factual lookup", which counts as an abstention.
+
+| Needle 3 mode | Sensitive | Difficulty | Both | Abstentions | Mean time |
+|---|---|---|---|---|---|
+| `record_decision` | 1/24 | 0/24 | 0/24 | 47 of 48 | 0.20 s |
+| `options_as_tools` | 1/24 | 6/24 | 1/24 | 31 of 48 | 0.23 s |
+
+The second mode turns every option into its own tool, and the engine then picks a tool 17 times. It still reads only 6 difficulty answers right. Needle is fast, at 0.20 s for both questions and 100 MB of RAM, and the speed does not help. JevBench reports the same picture: 0 of 16 on the ordinal topic.
+
+Needle also gives no probability per option, only 1 confidence value for the whole call. The calibration column therefore stays empty.
+
+8. **Cost of a judge call:** 0.60 s with the 4B model for both questions. The 9B model needs 0.88 s, which is 47 % more, for a worse score.
 
 ## Files
 

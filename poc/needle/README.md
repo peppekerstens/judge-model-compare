@@ -1,6 +1,19 @@
 # Needle 3 as a judge: the survey and the plan
 
-**State on 2026-09-23: still to do.** This document holds the research and the plan. Needle 3 is not installed, and no bench ran. `app.py` and `Containerfile` here are drafts, and they are untested.
+**State on 2026-09-24: tested, and not usable.** Needle 3 ran the same 24 bench cases in both modes, in a Podman container on the CPU of the model host.
+
+| Mode | Sensitive | Difficulty | Both | Abstentions | Mean time |
+|---|---|---|---|---|---|
+| `record_decision` | 1/24 | 0/24 | 0/24 | 47 of 48 | 0.20 s |
+| `options_as_tools` | 1/24 | 6/24 | 1/24 | 31 of 48 | 0.23 s |
+
+**The cause.** Needle looks for a tool that serves the request. Our judge asks a question about the request. The engine answers "No tool available for geography or factual lookup", and that counts as an abstention. JevBench reports the same: 0 of 16 on the ordinal topic.
+
+**What ran.** `needle_bench.py` in this folder, with `cactus-needle==3.0.1`. The result files are `../results/judge-needle3-*.json`. The engine is fast: 0.20 s for both questions, and 100 MB of RAM.
+
+**One install trap.** Version 3.0.5 of the package asks Hugging Face for an engine wheel 3.0.2, and that file does not exist. The model repository holds 3.0.0 and 3.0.1 only. Pin `cactus-needle==3.0.1`.
+
+`app.py` and `Containerfile` in this folder stay drafts. A service adds nothing while the engine abstains.
 
 Research of 2026-09-23. Needle 3 by Cactus Compute is a candidate for a fifth judge, next to the 3 Qwen
 judges and Laya. Nothing is installed and nothing is built. This folder holds the facts, the plan, and an

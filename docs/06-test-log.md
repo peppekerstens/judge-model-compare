@@ -36,7 +36,8 @@ The judge answers 2 questions for each request: sensitive data (yes or no), and 
 | Qwen3.5-2B | Letter logprobs, 2 calls | legion GPU | 1,712 MiB | 24/24 | 12/24 | 12/24 | 0.41 s |
 | Laya multilingual, GPU | Encoder, 1 pass | legion GPU | 1,715 MiB | 14/24 | 6/24 | 4/24 | 0.20 s |
 | Laya multilingual, CPU | Encoder, 1 pass | legion CPU | none | 14/24 | 6/24 | 4/24 | 0.48 s |
-| Needle 3 | Label and 1 confidence | **still to do** | - | - | - | - | - |
+| Needle 3, `record_decision` | Label and 1 confidence | legion CPU | none | 1/24 | 0/24 | 0/24 | 0.20 s |
+| Needle 3, `options_as_tools` | Label and 1 confidence | legion CPU | none | 1/24 | 6/24 | 1/24 | 0.21 s |
 
 **The choice today: Qwen3.5-4B with the letter method.** It reads the most cases right, and the router uses it.
 
@@ -70,6 +71,8 @@ The judge answers 2 questions for each request: sensitive data (yes or no), and 
 | 16 | 2026-09-23 | The same Qwen3.5-4B as a judge through the fork endpoint `/v1/decision`, on the 24 cases | 21/24 against 23/24 for the letter method, at 0.28 s against 0.51 s. It misses 2 sensitivity cases | `../poc/decision-judge/README.md` |
 
 | 17 | 2026-09-23 | Wording test of the sensitivity question on the fork: 3 variants over the 24 cases | The first variant stays the best at 21/24. More text gives 19/24, and an enum gives 17/24 | `../poc/decision-judge/README.md` |
+
+| 18 | 2026-09-24 | Needle 3 on the 24 cases, in both modes, in a container on the model host CPU | 0 and 1 of 24 right. It abstains on 47 of 48 questions in the default mode | `../poc/needle/README.md` |
 
 ## What each test says
 
@@ -111,7 +114,7 @@ The judge answers 2 questions for each request: sensitive data (yes or no), and 
 
 | # | Work | Estimate | Where |
 |---|---|---|---|
-| 1 | **Needle 3: install and test.** The research and the plan are ready, and nothing runs yet. 4 steps: a smoke test in a venv on LXC 110, the container, the `/v1/systemone` adapter, then the bench on the same 24 cases | 2.5 hours | `../poc/needle/README.md` |
+| 1 | ~~Needle 3: install and test~~ **Done on 2026-09-24. It is not usable: 0 and 1 of 24 cases right** | done | `../poc/needle/README.md` |
 | 2 | Find why the fork misses 2 sensitivity cases. The wording is not the cause, so the prompt template of the fork is the next place to look | 1 hour | `../poc/decision-judge/README.md` |
 | 3 | Decide on the fork: keep the letter method, or take the speed win for the difficulty question only | 30 minutes | `../poc/results/README.md` |
 | 4 | Stage 2 of the router: authentication, and a rate limit | not planned | `07-poc-router-plan.md` |
@@ -119,7 +122,7 @@ The judge answers 2 questions for each request: sensitive data (yes or no), and 
 ## Open items
 
 - Why the fork misses 2 sensitivity cases. The wording is not the cause. The next idea is the prompt template of the fork.
-- Needle 3 is researched and planned. It is not installed and not tested. It is item 1 of the work above.
+- Needle 3 is tested and closed. It abstains on our questions, because it looks for a tool that serves the request.
 - The 9B model has no LiteLLM tier.
 - gaming-b650 (Vulkan, 32 GB) is not tested. Qwen3.5-27B Q4 fits there, but SemIf has no published number for it.
 - One run per model. There are no repeat draws and no confidence intervals.

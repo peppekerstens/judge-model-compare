@@ -1,39 +1,11 @@
-# UNTESTED DRAFT. The Needle 3 judge, for LXC 110 jev-poc with Docker.
-# This file was never built. Read README.md first.
+# Needle 3 for the bench, on the CPU of the model host. It needs no GPU.
+# Build:  podman build -t needle-smoke .
+# Run:    podman run --rm -v $PWD:/app -v ~/needle-cache:/root/.cache needle-smoke \
+#           python /app/needle_bench.py --cases /app/judge_cases.jsonl --out /app/out --mode tools
 #
-# CPU only: Needle 3 is a CPU engine, and no GPU helps it.
-# Build:  docker build -f Containerfile -t needle-judge .
-# Run:    docker run -d --name needle-judge -p 8084:8084 needle-judge
+# Pin 3.0.1. Version 3.0.5 asks Hugging Face for an engine wheel 3.0.2, and that file
+# does not exist. The model repository holds 3.0.0 and 3.0.1 only.
 FROM docker.io/library/python:3.13-slim
-
-# The package is 99 KB and pure Python. Its one hard dependency is huggingface_hub.
-# Do not write `pip install needle`: that name belongs to an unrelated CSS test tool.
-RUN pip install --no-cache-dir "cactus-needle==3.0.5" fastapi "uvicorn[standard]"
-
-ENV HF_HOME=/hf \
-    NEEDLE_TELEMETRY=0 \
-    DO_NOT_TRACK=1 \
-    NEEDLE_CHOICE_MODE=record_decision \
-    NEEDLE_MAX_TOKENS=128 \
-    PYTHONUNBUFFERED=1
-
-# Bake the engine and the weights into the image, so the service needs no
-# internet at runtime. `needle fetch` pulls the engine for this platform, and
-# the first agent pulls needle3.cact, about 35 MB. Both land in the HF cache and
-# in ~/.cache/cactus-needle/v3/.
-# Not verified: whether `needle fetch` alone also pulls the weights. When it does
-# not, the second line does it.
-RUN needle fetch && \
-    python -c "import needle; a = needle.Needle(tools=[{'name': 'noop', \
-        'description': 'no operation', \
-        'parameters': {'type': 'object', 'properties': {}, 'required': []}}]); \
-        a.complete('warm up', max_new_tokens=8); a.close()"
-
-# No network call after the build.
-ENV HF_HUB_OFFLINE=1
-
+RUN pip install --no-cache-dir "cactus-needle==3.0.1"
+ENV NEEDLE_TELEMETRY=0 DO_NOT_TRACK=1 PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY app.py /app/app.py
-EXPOSE 8084
-# One worker. The engine holds one process-global model and one conversation.
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8084", "--workers", "1"]

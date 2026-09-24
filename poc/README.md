@@ -143,7 +143,7 @@ A judge failure does not break the request. The router then takes the fallback m
 | `laya/` | The Laya judge on legion-t5, with its own README and deploy script |
 | `decision-fork/` | The llama.cpp fork with the `/v1/decision` endpoint: the CUDA build, the deploy script and the live security test |
 | `decision-judge/` | The judge on the fork endpoint `/v1/decision`. It runs on LXC 110, port 8085 |
-| `needle/` | Needle 3 of Cactus Compute: research, the plan, and a draft service. **Still to do: install and test** |
+| `needle/` | Needle 3 of Cactus Compute: the research, `needle_bench.py`, and the result. It abstains on our questions |
 
 ## Rebuild
 

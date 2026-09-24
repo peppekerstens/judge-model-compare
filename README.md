@@ -6,7 +6,7 @@ The work starts with Jev, the "System 1" classification model from TypeSafe AI, 
 
 Status: research and a running proof of concept. Local repo, no remote.
 
-Open work, 2026-09-23: Needle 3 is planned and not tested yet. The full list is in `docs/06-test-log.md`, section "Work still to do".
+Open work: see `docs/06-test-log.md`, section "Work still to do". Needle 3 is tested and closed on 2026-09-24.
 
 ## Sources
 
@@ -33,7 +33,7 @@ Open work, 2026-09-23: Needle 3 is planned and not tested yet. The full list is 
 | `poc/laya/` | The Laya judge on legion-t5, and its result. See `poc/laya/README.md` |
 | `poc/decision-fork/` | The llama.cpp fork with Jev support: build, install and security test. See `poc/decision-fork/README.md` |
 | `poc/decision-judge/` | The judge that uses the fork endpoint, with the speed and quality result |
-| `poc/needle/` | Needle 3 of Cactus Compute: the facts, the host choice and the plan. **Not installed, not tested.** See `poc/needle/README.md` |
+| `poc/needle/` | Needle 3 of Cactus Compute: the facts, the bench and the result. Not usable as a judge |
 | `poc/results/` | The judge comparison and the raw result files. See `poc/results/README.md` |
 | `semif-test/` | Scripts, container and results to run that test again. See `semif-test/README.md` |
 | `router/` | A copy of one open-source Jev router. See `router/UPSTREAM.md` |

@@ -19,11 +19,13 @@ VRAM = {"Qwen/Qwen3.5-2B": "1,712 MiB", "Qwen/Qwen3.5-4B": "3,568 MiB", "Qwen/Qw
         "qwen3.5-4b-decision-fork": "3,452 MiB",
         "qwen3.5-4b-decision-fork-true_only": "3,452 MiB",
         "qwen3.5-4b-decision-fork-both": "3,452 MiB",
-        "qwen3.5-4b-decision-fork-enum": "3,452 MiB"}
+        "qwen3.5-4b-decision-fork-enum": "3,452 MiB",
+        "needle3-record_decision": "none, CPU", "needle3-tools": "none, CPU"}
 ORDER = ["Qwen/Qwen3.5-2B", "Qwen/Qwen3.5-4B", "Qwen/Qwen3.5-9B",
          "qwen3.5-4b-decision-fork", "qwen3.5-4b-decision-fork-true_only",
          "qwen3.5-4b-decision-fork-both", "qwen3.5-4b-decision-fork-enum",
-         "convaiinnovations/laya-multilingual", "laya-multilingual-gpu"]
+         "convaiinnovations/laya-multilingual", "laya-multilingual-gpu",
+         "needle3-record_decision", "needle3-tools"]
 # The CPU run and the GPU run of Laya report the same model name, so the label of the
 # result file separates them.
 LABEL_AS_MODEL = {"laya-multilingual-gpu"}
@@ -55,8 +57,15 @@ def judge_table() -> None:
               f"{statistics.median(times):.2f} s | {statistics.mean(times):.2f} s | {max(times):.2f} s |")
 
     print("\n### The cases that a judge reads differently\n")
-    print("| Case | Wanted | Qwen3.5-2B | Qwen3.5-4B | Qwen3.5-9B | 4B on the fork | Laya CPU | Laya GPU |")
-    print("|---|---|---|---|---|---|---|---|")
+    # The header follows ORDER, so a new judge needs no edit here.
+    short = {"Qwen/Qwen3.5-2B": "2B", "Qwen/Qwen3.5-4B": "4B", "Qwen/Qwen3.5-9B": "9B",
+             "qwen3.5-4b-decision-fork": "fork", "qwen3.5-4b-decision-fork-true_only": "fork true_only",
+             "qwen3.5-4b-decision-fork-both": "fork both", "qwen3.5-4b-decision-fork-enum": "fork enum",
+             "convaiinnovations/laya-multilingual": "Laya CPU", "laya-multilingual-gpu": "Laya GPU",
+             "needle3-record_decision": "Needle record", "needle3-tools": "Needle tools"}
+    columns = [m for m in ORDER if m in by_model]
+    print("| Case | Wanted | " + " | ".join(short.get(m, m) for m in columns) + " |")
+    print("|" + "---|" * (len(columns) + 2))
     ids = sorted({r["id"] for rows in by_model.values() for r in rows})
     for case_id in ids:
         picks = {}
@@ -69,14 +78,15 @@ def judge_table() -> None:
         if all(r["ok"] for r in picks.values()):
             continue
         cells = []
-        for model in ORDER:
+        for model in columns:
             row = picks.get(model)
             if not row:
                 cells.append("-")
                 continue
-            text = row["difficulty"] if row["difficulty"] != want[0] else "ok"
+            # An abstention gives None. Needle abstains, and that counts as a wrong answer.
+            text = "ok" if row["difficulty"] == want[0] else str(row["difficulty"] or "abstained")
             if row["sensitive"] != want[1]:
-                text += f", sensitive {row['sensitive']}"
+                text += ", sensitive %s" % (row["sensitive"] if row["sensitive"] is not None else "abstained")
             cells.append(text)
         print(f"| {case_id} | {want[0]}, sensitive {want[1]} | " + " | ".join(cells) + " |")
 

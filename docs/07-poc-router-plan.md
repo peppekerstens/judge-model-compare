@@ -78,7 +78,7 @@ The judge changed to Qwen3.5-4B Q4_K_M on 2026-09-23, after the judge bench. See
 | The router with the judge, the rules and the log page | Runs. 7 of 7 route tests correct, and streaming works |
 | Judge candidates measured | 4: Qwen3.5-2B, 4B and 9B with the letter method, and the same 4B on the llama.cpp fork |
 | Laya multilingual | Measured on the CPU and on the GPU. 4 of 24 cases right, so it is not usable |
-| Needle 3 | **Still to do.** The plan is ready, and nothing runs. See `../poc/needle/README.md` |
+| Needle 3 | Tested on 2026-09-24 and closed. It reads 0 and 1 of 24 cases right |
 | The judge of the router | Qwen3.5-4B with the letter method. It reads 23 of 24 cases right |
 
 The next steps are in `06-test-log.md`, section "Work still to do".
