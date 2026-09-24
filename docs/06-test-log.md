@@ -105,12 +105,23 @@ The judge answers 2 questions for each request: sensitive data (yes or no), and 
 
 ## State of the hosts after the tests
 
-- **legion-t5:** `llama-embed` and `llama-rerank` are stopped and still enabled. They start again at the next reboot. LiteLLM uses the gaming-b650 CPU fallback until then.
-- **legion-t5:** Qwen3.5-4B runs in llama-server on port 11434 as the judge model of the router, 3,546 MiB. The llama.cpp fork runs in Podman on port 11436, with the same model, 3,452 MiB. Both together fill 7 GB of the 8 GB card. Neither has a systemd unit, so both stop at a reboot. Neither is in LiteLLM.
-- **legion-t5:** the Laya CPU container runs on port 8082. The Laya GPU container is stopped, because its test is done.
-- **LXC 110:** `semif-judge` (8080), `jev-router` (8081) and `decision-judge` (8085).
-- **New on legion-t5:** `/opt/llama.cpp-prism`, `/opt/models/qwen3-0.6b-q8_0.gguf`, `/opt/models/qwen3.5-2b.gguf`, `~/semif-test/`.
-- **buildbox (LXC 103):** `/srv/semif-test/` with the 2 upstream repos, the image `localhost/semif-remote`, and the same results as in this repo.
+Checked live on 2026-09-24, after the cleanup.
+
+**legion-t5**
+
+- `llama-embed` (port 11435) and `llama-rerank` (port 11436) run again, after the reboot. They hold 7,402 MiB of the 8,192 MiB card. LiteLLM uses legion as the primary again.
+- The judge model of the router stopped at the reboot. It has no systemd unit. The GPU has 753 MiB free, so the model does not fit next to the 2 tiers. The router falls back on every request.
+- The llama.cpp fork stays on the host as the image `localhost/decision-fork` and the stopped container `decision-fork`. It cannot start now: `llama-rerank` holds its port 11436, and the GPU has no room. To use it, stop `llama-rerank` first, or map another port.
+- The Laya containers and images are removed. The Needle image is removed. The build folders `~/needle-cache`, `~/needle-smoke` and `~/semif-test` are removed.
+- Still on the host: `/opt/llama.cpp-prism` (197 MB), and the GGUF files of the test in `/opt/models/`. The prism fork runs the Bonsai model, so both stay.
+
+**LXC 110**
+
+- `semif-judge` (8080), `jev-router` (8081) and `decision-judge` (8085) run. They stay.
+
+**buildbox (LXC 103)**
+
+- `/srv/semif-test`, the image `semif-remote` and the image `prism-audit` are removed. Every script to rebuild them is in this repository.
 
 ## Work still to do
 
