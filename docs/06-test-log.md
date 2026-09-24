@@ -73,17 +73,7 @@ The judge answers 2 questions for each request: sensitive data (yes or no), and 
 | 17 | 2026-09-23 | Wording test of the sensitivity question on the fork: 3 variants over the 24 cases | The first variant stays the best at 21/24. More text gives 19/24, and an enum gives 17/24 | `../poc/decision-judge/README.md` |
 
 | 18 | 2026-09-24 | Needle 3 on the 24 cases, in both modes, in a container on the model host CPU | 0 and 1 of 24 right. It abstains on 47 of 48 questions in the default mode | `../poc/needle/README.md` |
-
-## What each test says
-
-1. **The method is sound.** The adapter builds the same prompt as SemIf, byte for byte, and reads the same answer logits. The 4B reference run lands within 0.002 of the published score.
-2. **Quantization costs little at Q4_K_M for a 4B model**, and more for a 2B model. Q8_0 for the 0.6B model is almost lossless. The GSQ Q2 file loses 4 points on JevBench.
-3. **Model size wins.** The step from 4B to 9B gives 3 points on JevBench and 6 points on the hard tier.
-4. **The 27B ternary model gives no gain over the 9B model**, and it costs the PrismML fork plus 3 times the time.
-5. **A 2B model is too weak as a judge.** It fails 25 % of the standard items.
-6. **One call beats two on speed, and it costs 2 sensitivity answers.** The fork answers both questions in 1 call at 0.28 s. The letter method needs 2 calls and 0.51 s. A wording test with 3 variants did not fix the 2 misses, so the field description is not the cause.
-7. **An encoder model is not a judge out of the box.** Laya multilingual answers in 0.5 to 0.8 s on the CPU and costs no VRAM, but it reads 4 of 24 bench cases right. The author says the same: the base checkpoints score near random zero-shot.
-8. **The gap to Jev 1.13.0 is on the hard tier**: 65.8 % for the 9B model against 73.0 % for Jev.
+| 19 | 2026-09-24 | The PII proxy chain on the 24 cases: Presidio masks the spans, and the fork audits the masked text | 0 real values reach the cloud. The round trip is exact 24 of 24. The mask needs 15 ms, and the audit 265 ms | `../pii-proxy/README.md` |
 
 ## Failures during the work, and the fix
 
@@ -91,6 +81,8 @@ The judge answers 2 questions for each request: sensitive data (yes or no), and 
 |---|---|---|
 | `pip install cactus-needle` stopped with HTTP 404 | Version 3.0.5 asks Hugging Face for an engine wheel 3.0.2, and that file does not exist | Pin `cactus-needle==3.0.1` in the `Containerfile` |
 | `results_table.py` stopped with a `None` error on the Needle rows | A judge that abstains gives no value, and the header was fixed to the Qwen judges | A dynamic header from `ORDER`, and the text "abstained" for an empty answer |
+| The audit of the fork missed both residual values, and it scored 12 of 24 on the difficulty | The words "already removed" made the model read the whole text as safe. The enum had no level criteria | Round 2 of the wording names the street and the medical fact, and the enum carries the level criteria. 23 of 24 |
+| The Presidio analyzer did not start on LXC 109 | 4 GB of RAM is not enough next to the LiteLLM stack, because the analyzer holds a spaCy model | `pct set 109 -memory 6144` on the Proxmox node |
 | The CUDA build of the fork failed with `undefined reference to cuMemCreate` | The CUDA devel image ships the driver API as a stub only | The stub folder on the link line, a `libcuda.so.1` link, and the linker flags |
 | The fork binary stopped with `libgomp.so.1: cannot open shared object file` | The CUDA runtime image has no OpenMP | `libgomp1` in the runtime stage |
 | The fork server stopped with `failed to allocate buffer for rs cache` | Qwen3.5 is hybrid attention, so the recurrent-state cache scales with `--decision-seqs` | 3 sequences and a context of 8,192 |
@@ -131,6 +123,8 @@ Checked live on 2026-09-24, after the cleanup.
 | 2 | Find why the fork misses 2 sensitivity cases. The wording is not the cause, so the prompt template of the fork is the next place to look | 1 hour | `../poc/decision-judge/README.md` |
 | 3 | Decide on the fork: keep the letter method, or take the speed win for the difficulty question only | 30 minutes | `../poc/results/README.md` |
 | 4 | Stage 2 of the router: authentication, and a rate limit | not planned | `07-poc-router-plan.md` |
+| 5 | Send real traffic through the PII gate, and compare the answer quality of a masked prompt | 2 hours | `../pii-proxy/README.md` |
+| 6 | Decide on the PII chain: keep this gate, or switch on the LiteLLM Presidio guardrail | 30 minutes | `../pii-proxy/README.md` |
 
 ## Open items
 
