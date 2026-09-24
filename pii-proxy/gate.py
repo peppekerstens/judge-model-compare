@@ -129,11 +129,46 @@ def mask(text: str, analyzer_url: str, language: str = "en") -> MaskResult:
                       seconds=time.perf_counter() - started)
 
 
-def restore(text: str, mapping: dict) -> str:
-    """Put the original value back. A missing placeholder is not an error."""
+# A secret must never come back into the answer. The traffic test of 2026-09-24
+# proved the need on case r1-11: the model wrote the real password into its own
+# example, and the raw model had used a placeholder and a warning instead.
+SECRET_TYPES = {"PASSWORD", "AWS_ACCESS_KEY", "AWS_SECRET_KEY", "API_KEY"}
+
+PLACEHOLDER_RE = re.compile(r"<([A-Z][A-Z_]*)_(\d+)>")
+
+
+def is_secret(placeholder: str) -> bool:
+    found = PLACEHOLDER_RE.fullmatch(placeholder)
+    return bool(found) and found.group(1) in SECRET_TYPES
+
+
+def restore(text: str, mapping: dict, keep_secrets: bool = True) -> str:
+    """Put the original value back. A missing placeholder is not an error.
+
+    With `keep_secrets` the placeholder of a secret stays in the answer, so a
+    password or a key never reaches the screen again.
+    """
     for placeholder, original in mapping.items():
+        if keep_secrets and is_secret(placeholder):
+            continue
         text = text.replace(placeholder, original)
-    return text
+    return strip_unknown(text, mapping)
+
+
+def strip_unknown(text: str, mapping: dict) -> str:
+    """Replace a placeholder that the model invented with a readable word.
+
+    The traffic test of 2026-09-24 showed it on case r2-01: the map held
+    `<IP_ADDRESS_1>` only, and the model wrote `<IP_ADDRESS_2>` for a second
+    example address. No map entry can fill that, so the answer kept the raw
+    placeholder. A readable word is better than angle brackets.
+    """
+    def word(found: "re.Match") -> str:
+        name = found.group(1)
+        if found.group(0) in mapping:
+            return found.group(0)          # a real one, and a secret we keep
+        return "the " + name.replace("_", " ").lower()
+    return PLACEHOLDER_RE.sub(word, text)
 
 
 # Round 1 of the wording, kept for the record. It scored 18 of 24 on the
@@ -193,14 +228,23 @@ def audit(masked_text: str, fork_url: str, timeout: float = 60.0) -> dict:
             "difficulty_p": float(fields["difficulty"]["probability"])}
 
 
+# The target names must match the upstream gateway. LiteLLM holds no cloud tier,
+# so ROUTE_HARD points at a local tier there. The proof of concept router on
+# port 8081 does hold the cloud tier, and ROUTE_HARD=qwen3.7-max then applies.
 def route(sensitive_remains: bool, difficulty: str) -> tuple:
     """The rule of the proof of concept. Sensitivity wins over difficulty."""
+    sensitive_target = os.environ.get("ROUTE_SENSITIVE", "qwen3.8-27b-local")
     if sensitive_remains:
-        return "qwen3.8-27b-local", "sensitive data remains after the mask"
-    return {"simple": ("qwen3.8-27b-nothink", "simple, so the local fast tier"),
-            "medium": ("qwen3.8-27b-local", "medium, so the local tier"),
-            "hard": ("qwen3.7-max", "hard, so the cloud tier")}.get(
-        difficulty, ("qwen3.8-27b-local", "unknown difficulty, so the local tier"))
+        return sensitive_target, "sensitive data remains after the mask"
+    table = {
+        "simple": (os.environ.get("ROUTE_SIMPLE", "qwen3.8-27b-nothink"),
+                   "simple, so the local fast tier"),
+        "medium": (os.environ.get("ROUTE_MEDIUM", "qwen3.8-27b-local"),
+                   "medium, so the local tier"),
+        "hard": (os.environ.get("ROUTE_HARD", "qwen3.7-max"),
+                 "hard, so the strongest tier"),
+    }
+    return table.get(difficulty, (sensitive_target, "unknown difficulty, so the local tier"))
 
 
 def env(name: str, default: str | None = None) -> str:

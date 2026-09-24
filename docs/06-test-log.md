@@ -74,6 +74,7 @@ The judge answers 2 questions for each request: sensitive data (yes or no), and 
 
 | 18 | 2026-09-24 | Needle 3 on the 24 cases, in both modes, in a container on the model host CPU | 0 and 1 of 24 right. It abstains on 47 of 48 questions in the default mode | `../poc/needle/README.md` |
 | 19 | 2026-09-24 | The PII proxy chain on the 24 cases: Presidio masks the spans, and the fork audits the masked text | 0 real values reach the cloud. The round trip is exact 24 of 24. The mask needs 15 ms, and the audit 265 ms | `../pii-proxy/README.md` |
+| 20 | 2026-09-24 | 12 real requests through the PII gate, each with a raw answer and a judge verdict | 0 placeholder defects. The masked answer does the same job in 9 of 12 cases. The gate adds 0.38 s | `../pii-proxy/README.md` |
 
 ## Failures during the work, and the fix
 
@@ -84,6 +85,12 @@ The judge answers 2 questions for each request: sensitive data (yes or no), and 
 | The audit of the fork missed both residual values, and it scored 12 of 24 on the difficulty | The words "already removed" made the model read the whole text as safe. The enum had no level criteria | Round 2 of the wording names the street and the medical fact, and the enum carries the level criteria. 23 of 24 |
 | The Presidio analyzer did not start on LXC 109 | 4 GB of RAM is not enough next to the LiteLLM stack, because the analyzer holds a spaCy model | `pct set 109 -memory 6144` on the Proxmox node |
 | The gate reported the fork as healthy while the fork was stopped | `llama-rerank` holds the same port 11436, and it is also a llama-server, so it answers `/health` with 200 | `/healthz` sends 1 small `/v1/decision` call, and it reports `decision_endpoint` |
+| The model refused a masked request: "I cannot include personal information such as names" | It read the placeholders as a rule against personal data | A system line: a placeholder stands for a real value, write it back, and do not refuse |
+| A clean request broke. "What is the capital of France?" became "the capital of `<LOCATION_1>`" | Presidio marks "France" as a location, and every request got a mask | The fork reads the raw text first. A clean request gets no mask |
+| A placeholder stayed in a stream answer | The restore ran on the raw bytes with a fixed window. The model split the placeholder over 2 SSE frames | The gate parses each frame, restores the decoded text, and cuts at the last `<` |
+| The answer held the real password again, and the model invented `<IP_ADDRESS_2>` | The restore filled every placeholder, and an unknown placeholder stayed as text | A secret type keeps its placeholder. An unknown one becomes a readable word |
+| Every call took 0.4 s, and the times meant nothing | LiteLLM holds a Redis cache, and it served every answer | Each call sends `"cache": {"no-cache": true}` |
+| 4 answers came back empty | `max_tokens` of 400, and the local tier reasons first | 1,500 tokens for an answer, and a judge tier without reasoning |
 | The CUDA build of the fork failed with `undefined reference to cuMemCreate` | The CUDA devel image ships the driver API as a stub only | The stub folder on the link line, a `libcuda.so.1` link, and the linker flags |
 | The fork binary stopped with `libgomp.so.1: cannot open shared object file` | The CUDA runtime image has no OpenMP | `libgomp1` in the runtime stage |
 | The fork server stopped with `failed to allocate buffer for rs cache` | Qwen3.5 is hybrid attention, so the recurrent-state cache scales with `--decision-seqs` | 3 sequences and a context of 8,192 |
@@ -124,7 +131,7 @@ Checked live on 2026-09-24, after the cleanup.
 | 2 | Find why the fork misses 2 sensitivity cases. The wording is not the cause, so the prompt template of the fork is the next place to look | 1 hour | `../poc/decision-judge/README.md` |
 | 3 | Decide on the fork: keep the letter method, or take the speed win for the difficulty question only | 30 minutes | `../poc/results/README.md` |
 | 4 | Stage 2 of the router: authentication, and a rate limit | not planned | `07-poc-router-plan.md` |
-| 5 | Send real traffic through the PII gate, and compare the answer quality of a masked prompt | 2 hours | `../pii-proxy/README.md` |
+| 5 | ~~Send real traffic through the PII gate~~ **Done on 2026-09-24. 0 placeholder defects, and 9 of 12 answers do the same job** | done | `../pii-proxy/README.md` |
 | 6 | Decide on the PII chain: keep this gate, or switch on the LiteLLM Presidio guardrail | 30 minutes | `../pii-proxy/README.md` |
 
 ## Open items

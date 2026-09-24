@@ -52,6 +52,15 @@ UPSTREAM_KEY = os.environ.get("UPSTREAM_KEY", "")
 LOG_DB = os.environ.get("LOG_DB", "/data/pii-gate.sqlite")
 LOG_MASKED = os.environ.get("LOG_MASKED", "1") == "1"
 TIMEOUT_S = float(os.environ.get("TIMEOUT_S", "600"))
+HINT = os.environ.get("PLACEHOLDER_HINT", "1") == "1"
+HINT_TEXT = (
+    "Some words in the request are replaced by a placeholder, for example "
+    "<PERSON_1>, <STREET_ADDRESS_1> or <IBAN_CODE_1>. A placeholder stands for a "
+    "real value that you do not need. Treat it as the real value, and write it "
+    "back in your answer exactly as you see it, with the angle brackets. Do not "
+    "refuse, and do not say that information is missing because of a placeholder. "
+    "Use only a placeholder that the request holds. Never invent a new one with a "
+    "higher number.")
 
 app = FastAPI(title="pii-gate")
 
@@ -137,12 +146,32 @@ async def chat(request: Request):
     text = last_user_text(messages)
     started = time.perf_counter()
 
-    masked = gate.mask(text, ANALYZER)
-    audit = gate.audit(masked.text, FORK, timeout=TIMEOUT_S)
+    # The fork reads the RAW text first. The traffic test of 2026-09-24 showed
+    # why: Presidio marks "France" in "What is the capital of France?" as a
+    # location, the model then reads `<LOCATION_1>` and refuses to answer. A
+    # clean request must never get a mask. The fork scores 22 of 24 on raw text,
+    # so it is the right gate for that question.
+    pre = gate.audit(text, FORK, timeout=TIMEOUT_S)
+    if pre["sensitive"]:
+        masked = gate.mask(text, ANALYZER)
+        audit = gate.audit(masked.text, FORK, timeout=TIMEOUT_S)
+        audit["seconds"] += pre["seconds"]
+        audit["difficulty"] = pre["difficulty"]     # judged on the full text
+    else:
+        masked = gate.MaskResult(text=text)         # no mask, no map
+        audit = pre
     target, reason = gate.route(audit["sensitive"], audit["difficulty"])
+    if not pre["sensitive"]:
+        reason = "no sensitive data in the request, so no mask"
 
     upstream_body = dict(body)
     upstream_body["messages"] = replace_user_text(messages, masked.text)
+    if masked.mapping and HINT:
+        # Without this line the model refuses. The test of 2026-09-24 showed it
+        # on case r1-10: it answered "I cannot include personal information
+        # such as names", while the raw request gave "Happy Birthday, Jan!".
+        upstream_body["messages"] = [{"role": "system", "content": HINT_TEXT}] \
+            + upstream_body["messages"]
     upstream_body["model"] = target
     stream = bool(body.get("stream"))
 
@@ -183,24 +212,65 @@ async def chat(request: Request):
         write_log(time.perf_counter() - started)
         return JSONResponse(payload, headers=extra)
 
-    # A placeholder can break over 2 chunks, so the restore keeps a small tail
-    # in a buffer until the next chunk arrives.
+    # The restore must read the decoded content, and not the raw bytes.
+    #
+    # A first version held back a few raw characters and replaced on the byte
+    # stream. The test of 2026-09-24 proved that it fails: the model wrote
+    # `<LOCATION` in one chunk and `_1>` in the next, so about 60 characters of
+    # SSE framing sat between the 2 halves, and no window of that size helps.
+    #
+    # This version parses each `data:` frame, holds the decoded content of the
+    # last frames in a window as long as the longest placeholder, restores on
+    # that window, and writes the text back into the frame. The stream stays a
+    # stream, and a split placeholder still restores.
     async def events():
-        buffer = ""
         longest = max((len(k) for k in masked.mapping), default=0)
+        raw = ""          # incomplete SSE text between 2 reads
+        window = ""       # decoded content that is not sent yet
         async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
             async with client.stream("POST", f"{UPSTREAM}/v1/chat/completions",
                                      json=upstream_body, headers=headers) as answer:
                 async for chunk in answer.aiter_text():
-                    buffer += chunk
-                    if len(buffer) > longest:
-                        if longest:
-                            send, buffer = buffer[:-longest], buffer[-longest:]
+                    raw += chunk
+                    while "\n\n" in raw:
+                        frame, raw = raw.split("\n\n", 1)
+                        line = frame.strip()
+                        if not line.startswith("data:"):
+                            continue
+                        body_text = line[5:].strip()
+                        if body_text == "[DONE]":
+                            continue
+                        try:
+                            event = json.loads(body_text)
+                        except json.JSONDecodeError:
+                            yield frame + "\n\n"     # not ours, pass it through
+                            continue
+                        choices = event.get("choices") or [{}]
+                        delta = choices[0].get("delta") or {}
+                        window += delta.get("content") or ""
+                        # Restore first, then cut at the last `<`. A tail that
+                        # starts with `<` can still grow into a placeholder, so
+                        # it waits. A fixed window of `longest` characters does
+                        # not work: the cut lands inside the placeholder as soon
+                        # as 1 more character arrives after it.
+                        window = gate.restore(window, masked.mapping)
+                        cut = window.rfind("<")
+                        if cut != -1 and len(window) - cut > longest:
+                            cut = -1        # too long to become a placeholder
+                        if cut == -1:
+                            send, window = window, ""
                         else:
-                            send, buffer = buffer, ""
-                        yield gate.restore(send, masked.mapping)
-        if buffer:
-            yield gate.restore(buffer, masked.mapping)
+                            send, window = window[:cut], window[cut:]
+                        delta["content"] = send
+                        choices[0]["delta"] = delta
+                        event["choices"] = choices
+                        yield "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+        if window:
+            tail = {"choices": [{"index": 0, "finish_reason": None,
+                                 "delta": {"content": gate.restore(window, masked.mapping)}}],
+                    "object": "chat.completion.chunk"}
+            yield "data: " + json.dumps(tail, ensure_ascii=False) + "\n\n"
+        yield "data: [DONE]\n\n"
         write_log(time.perf_counter() - started)
 
     return StreamingResponse(events(), media_type="text/event-stream", headers=extra)

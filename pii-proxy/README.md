@@ -91,7 +91,8 @@ seconds against 15 ms for Presidio, so it loses on speed.
 | `gpu-window.sh` | It frees the GPU of legion-t5 for the test, and gives it back. `open`, `close` and `state` |
 | `build-cases.py` | It adds the `must_mask` list to the 24 bench cases |
 | `pii_cases.jsonl` | The 24 cases, with the strings that must not leak |
-| `pii_bench.py` | The measurement. It writes a result file into `results/` |
+| `pii_bench.py` | The decision measurement. It writes a result file into `results/` |
+| `real_traffic.py` | The answer measurement. 12 requests through the gate, each with a raw answer and a judge verdict |
 | `results/` | The raw result of each run |
 
 ### Replay the whole test
@@ -181,6 +182,73 @@ analyzer image needs no change.
 the types `DATE_TIME`, `URL` and the 5 `US_` types never get a mask, because a
 date or an amount breaks a tool call.
 
+## 4b. Real traffic through the gate, 12 requests, 2026-09-24
+
+The bench of part 4 measures the decision. This test measures the answer. Each
+case makes 3 calls: 1 through the gate, 1 straight to the same model with the
+raw text, and 1 judge call that compares both answers.
+
+| Number | Value |
+|---|---|
+| Placeholder defects in the answer | **0 of 12** |
+| Secret placeholders kept masked, on purpose | 2 |
+| The masked answer does the same job as the raw answer | **9 of 12** |
+| Streams with a placeholder left | **0 of 2** |
+| Mask time | 4.8 ms |
+| Audit time, 1 or 2 fork calls | 374 ms |
+| Whole request, the gate | 16.65 s |
+| Whole request, straight to the model | 13.23 s |
+
+The gate adds 0.38 s of its own. The rest of the difference comes from the
+answer: with the system hint the model writes more text.
+
+### The 3 answers that do not match
+
+| Case | What happened | Is it a real loss? |
+|---|---|---|
+| r1-12, a mortgage file | The raw model read the IBAN, saw `NL91`, and gave Dutch tax context. The masked model called the country unknown | Yes. The reasoning needs the real value |
+| r2-05, a salary list | The masked model could not join `<PERSON_1>` to a salary, and wrote "not specified" for 2 of 3 people | Yes. The reasoning needs the real value |
+| r2-08, an AWS key | The raw model knew `AKIAIOSFODNN7EXAMPLE` as a documentation example, and said there is nothing to rotate. The masked model treated it as real | No. The masked answer is the careful one |
+
+So 2 real losses of 12. Both sit on a request where the answer needs the value
+itself, and not only its shape. The router keeps such a request on the local
+model, so the mask is not needed there.
+
+### The 5 defects that real traffic found, and the fix for each
+
+Run 1 scored 3 of 12 on the same job question. Run 5 scores 9 of 12. Every
+result file stays in `results/`, so each step is open to a check.
+
+| # | Defect | Cause | Fix |
+|---|---|---|---|
+| 1 | The model refused. Case r1-10 answered "I cannot include personal information such as names", while the raw answer was "Happy Birthday, Jan!" | The model read placeholders and treated them as a rule against personal data | A system line: a placeholder stands for a real value, write it back, and do not refuse |
+| 2 | An empty answer on 4 cases | `max_tokens` of 400. The local tier reasons first, so the budget went to the reasoning | 1,500 tokens for an answer, and a judge tier without reasoning |
+| 3 | An over-mask broke a clean request. "What is the capital of France?" became "the capital of `<LOCATION_1>`", and the model asked for the country | Presidio marks "France" as a location. Every request got a mask | The fork reads the RAW text first. A clean request gets no mask at all |
+| 4 | A placeholder stayed in a stream. The answer held `<LOCATION_1>` twice | The restore ran on the raw bytes with a fixed window. The model split the placeholder over 2 frames, with 60 characters of SSE framing between the halves | The gate parses each frame, restores on the decoded text, and cuts at the last `<` |
+| 5 | The answer held the real password again, and the model invented `<IP_ADDRESS_2>` | The restore filled every placeholder, and an unknown placeholder stayed as text | A secret type keeps its placeholder. An unknown placeholder becomes a readable word, such as "the ip address" |
+
+### One result that looks wrong and is not
+
+Run 3 gave 0.4 s for every call. LiteLLM holds a Redis cache, and it served
+every answer from it. The test now sends `"cache": {"no-cache": true}` with each
+call. The file `results/traffic-v3-cached-2026-09-24.json` keeps that run.
+
+### The result files
+
+| File | What |
+|---|---|
+| `traffic-v1-no-hint-2026-09-24.json` | Run 1. No system hint, 400 tokens. Same job 3 of 12 |
+| `traffic-v2-hint-2026-09-24.json` | Run 2. With the hint, 1,500 tokens. Same job 7 of 12 |
+| `traffic-v3-cached-2026-09-24.json` | Run 3. Every answer came from the LiteLLM cache. The times mean nothing |
+| `traffic-v4-preaudit-2026-09-24.json` | Run 4. The raw pre-audit, and the cache off. Same job 8 of 12 |
+| `traffic-2026-09-24.json` | Run 5, the current one. The secret rule and the stream fix. Same job 9 of 12, 0 defects |
+
+### Replay it
+
+    ./pii-proxy/gpu-window.sh open
+    python3 pii-proxy/real_traffic.py
+    ./pii-proxy/gpu-window.sh close
+
 ## 5. Where it runs
 
 | Part | Host | Port | Note |
@@ -200,10 +268,10 @@ holds a spaCy model, and 4 GB is not enough next to the LiteLLM stack.
    A `/health` of 200 on that port proves nothing, because `llama-rerank` is
    also a llama-server and answers it. `/healthz` of the gate therefore sends
    1 small decision, and it reports `decision_endpoint` true or false.
-2. **No real traffic ran through the gate yet.** The bench measures the decision
-   and the mask, not the answer quality of a masked prompt.
-3. **A mask can break an answer.** A request like "correct this address" fails
-   when the model never sees the address. The bench holds no such case.
+2. ~~No real traffic ran through the gate yet.~~ **Done on 2026-09-24.** 12
+   requests ran through the gate, with a raw answer next to each one. See part 4b.
+3. **A mask can break an answer.** The traffic test measured it: 2 of 12 answers
+   lost quality, because the reasoning needed the value itself. See part 4b.
 4. **The gate keeps the map in memory for the length of 1 request.** A second
    turn in the same conversation gets a new map, so an older placeholder in the
    history does not restore. This is the same limit as the open LiteLLM issue.
